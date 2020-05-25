@@ -125,4 +125,86 @@ contract('RockPaperScissors', (accounts) => {
    assert.strictEqual(revealSessionEvent.args.result.toString(), result.toString(), "result of the game");
    assert.strictEqual(revealSessionEvent.args.bet.toString(), amount2.toString(), "latestBlock is not right");
  });
+
+ it("test: LogCancelInitator-event should be emitted", async() => {
+   const amount = toWei("2", "Gwei");
+   const move = 3;
+   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const maxGameTime = 7 * 86400 / 15;
+
+   await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
+
+
+   await helper.advanceTime(SECONDS_IN_DAY*1000);
+
+   const cancelObject = await contractInstance.cancelSessionInitiator(sessionID , {from: sender});
+   const { logs } = cancelObject;
+   const cancelEvent = cancelObject.logs[0];
+   truffleAssert.eventEmitted(cancelObject, "LogCancelInitator");
+   assert.strictEqual(cancelEvent.args.sender, sender, "sender isn't right");
+   assert.strictEqual(cancelEvent.args.hash, sessionID, "wrong ID");
+   assert.strictEqual(cancelEvent.args.bet.toString(),amount.toString() , "amount is not right");
+   //truffleAssert.prettyPrintEmittedEvents(cancelObject);
+  });
+
+  it("test: LogCancelChallengedPlayer-event should be emitted", async() => {
+    const amount = toWei("2", "Gwei");
+    const move = 3;
+    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const maxGameTime = 7 * 86400 / 15;
+
+    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
+
+    const amount1 = toWei("2", "Gwei");
+    const move1 =1;
+    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+
+    await helper.advanceTime(SECONDS_IN_DAY*1000);
+
+    const cancelObject = await contractInstance.cancelSessionChallengedPlayer(sessionID , {from: one});
+    const { logs } = cancelObject;
+    const cancelEvent = cancelObject.logs[0];
+    const sum = toBN(amount).add(toBN(amount1));
+    truffleAssert.eventEmitted(cancelObject, "LogCancelChallengedPlayer");
+    assert.strictEqual(cancelEvent.args.sender, one, "sender isn't right");
+    assert.strictEqual(cancelEvent.args.hash, sessionID, "wrong ID");
+    assert.strictEqual(cancelEvent.args.bet.toString(),sum.toString() , "amount is not right");
+    //truffleAssert.prettyPrintEmittedEvents(cancelObject);
+   });
+
+   it("test: LogWithdraw-event should be emitted | tx fee = gasUsed x gasPrice", async() => {
+    const amount = toWei("2", "Gwei");
+    const move = 1;
+    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const maxGameTime = 7 * 86400 / 15;
+    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
+
+    const amount1 = toWei("2", "Gwei");
+    const move1 =3;
+    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+    await contractInstance.revealSessionSolution(sessionID, web3.utils.toHex(secret), move, {from: sender});
+    const withdrawAmount = toWei("4", "Gwei");
+    const balanceBefore = await web3.eth.getBalance(sender);
+
+    const withdrawObject = await contractInstance.withdraw(withdrawAmount , {from: sender});
+    const { logs } = withdrawObject;
+    const withdrawEvent = withdrawObject.logs[0];
+    truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
+    assert.strictEqual(withdrawEvent.args.sender, sender, "sender isn't right");
+    assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawAmount.toString(), "hash problem");
+
+    const tx = await web3.eth.getTransaction(withdrawObject.tx);
+    //getting the receipt for calculating gasCost
+    const receipt = withdrawObject.receipt;
+    //calculating gasCost
+    const gasCost = toBN(tx.gasPrice).mul(toBN(receipt.gasUsed));
+    //calculating expectetbalanceafter
+    const expectedBalanceAfter = toBN(balanceBefore).add(toBN(toWei("4", "Gwei"))).sub(toBN(gasCost));
+    //getting the balance after withdraw
+    const balanceAfter = await web3.eth.getBalance(sender);
+    //test if expectedBalanceAfter == balanceAfter
+    assert.strictEqual(expectedBalanceAfter.toString(), balanceAfter.toString(), "Balance of one isn't right");
+
+
+     });
 });
