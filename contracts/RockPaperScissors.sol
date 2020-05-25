@@ -40,13 +40,13 @@ contract RockPaperScissors is Killable{
       uint expirationTime;
       uint betInitPlayer;
       uint betChallengedPlayer;
-      uint winner;
     }
 
     //Set up events
     event LogGameInit(address indexed sender, address indexed challengedPlayer, uint bet, uint expirationTime);
     event LogGameAcceptance(address indexed sender, uint setAmount, uint expirationTime);
-    event LogCancel(address indexed sender, bytes32 hash);
+    event LogCancelInitator(address indexed sender, bytes32 hash, uint bet);
+    event LogCancelChallengedPlayer(address indexed sender, bytes32 hash, uint bet);
     event LogSessionSolution(address indexed sender, address indexed challengedPlayer, uint result, uint bet);
     event LogWithdraw(address indexed sender, uint amount);
 
@@ -85,14 +85,16 @@ contract RockPaperScissors is Killable{
 
   //function to initialize the game with the challenged Player and the set move! The move is set, because of the hash!
   function initGame(address challengedPlayer, bytes32 sessionID) public payable {
+    //using the storage // https://medium.com/cryptologic/memory-and-storage-in-solidity-4052c788ca86
+    GameSession storage session = gameSessions[sessionID];
     //getting bet
     uint amount = msg.value;
     //set the requirements
+    require(sessionID != bytes32(0), "cannot be 0");
+    require(msg.sender != session.initPlayer, "This hash was already used or it is a running game");
     require(challengedPlayer != address(0), "cannot be zero");
     require(challengedPlayer != msg.sender, "cannot be the sender");
-    require(sessionID != bytes32(0), "cannot be 0");
-    //using the storage // https://medium.com/cryptologic/memory-and-storage-in-solidity-4052c788ca86
-    GameSession storage session = gameSessions[sessionID];
+
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     //saving data into storage
     session.initPlayer = msg.sender;
@@ -114,6 +116,7 @@ contract RockPaperScissors is Killable{
     GameSession storage session = gameSessions[sessionID];
     //check if the session has expired
     require(now < session.expirationTime, "session has expired");
+    require(session.move == Move.noMove, "The challengedPlayer already set a move");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
     session.betChallengedPlayer = session.betChallengedPlayer.add(msg.value);
@@ -121,24 +124,39 @@ contract RockPaperScissors is Killable{
     //event
     emit LogGameAcceptance(msg.sender, amount, expirationTime);
   }
-  //function to let the participants cancel the session
-  function cancelSession(bytes32 sessionID) public {
+  //function to let the initator cancel the session
+  function cancelSessionInitiator(bytes32 sessionID) public whenAlive {
     GameSession storage session = gameSessions[sessionID];
     address initPlayer = session.initPlayer;
-    address challengedPlayer = session.challengedPlayer;
     //both participants can cancel the session
-    require(initPlayer == msg.sender || challengedPlayer == msg.sender, "session can only be cancelled by the participants");
-    require(session.expirationTime > now, "session has not expired");
-    balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer);
-    balances[challengedPlayer] = balances[challengedPlayer].add(session.betChallengedPlayer);
-    emit LogCancel(msg.sender, sessionID);
-    //setting everything to 0
-    session.initPlayer = address(0);
-    session.challengedPlayer = address(0);
+    require(initPlayer == msg.sender, "session can only be cancelled by the initator");
+    require(session.expirationTime < now, "time-window to set a move for the challengedPlayer has exceeded");
+    balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
+    emit LogCancelInitator(msg.sender, sessionID, balances[msg.sender]);
+
+    //setting everything to 0, exept for the init.player
+    session.challengedPlayer = address(0x0);
     session.betInitPlayer = 0;
     session.betChallengedPlayer = 0;
     session.move = Move.noMove;
   }
+  function cancelSessionChallengedPlayer(bytes32 sessionID) public whenAlive {
+    GameSession storage session = gameSessions[sessionID];
+    address challengedPlayer = session.challengedPlayer;
+    require(challengedPlayer == msg.sender, "session can only be cancelled by the challengedPlayer");
+    require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
+    require(session.expirationTime < now, "time to reveal the session-solution has exceeded");
+    balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
+    emit LogCancelInitator(msg.sender, sessionID, balances[msg.sender]);
+
+    //setting everything to 0, exept for the init.player
+    session.challengedPlayer = address(0x0);
+    session.betInitPlayer = 0;
+    session.betChallengedPlayer = 0;
+    session.move = Move.noMove;
+
+  }
+  //function to let the challengedPlayer cancel
   //reveal the solution. This function can only be called by the initiator
   function revealSessionSolution(bytes32 sessionID, bytes32 secret, Move move) public payable whenAlive {
     GameSession storage session = gameSessions[sessionID];
@@ -161,8 +179,7 @@ contract RockPaperScissors is Killable{
       balances[challengedPlayer] = balances[challengedPlayer].add(bet);
     }
 
-    //setting everything to 0
-    session.initPlayer = address(0x0);
+    //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
     session.betInitPlayer = 0;
     session.betChallengedPlayer = 0;
