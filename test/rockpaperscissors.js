@@ -86,6 +86,22 @@ contract('RockPaperScissors', (accounts) => {
    assert.strictEqual(acceptGameEvent.args.expirationTime.toString(), getTime.toString(), "latestBlock is not right");
   });
 
+  it("test: accept a game two times should not be possible", async() => {
+    const amount = toWei("2", "Gwei");
+    const move = 3;
+    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const maxGameTime = 7 * 86400 / 15;
+
+    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
+
+    const amount1 = toWei("2", "Gwei");
+    const move1 =2;
+    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+    await truffleAssert.reverts(
+      contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1}),
+      "The challengedPlayer already set a move");
+   });
+
   it("test: LogSessionSolution-event should be emitted", async() => {
    const amount = toWei("2", "Gwei");
    const move = 1;
