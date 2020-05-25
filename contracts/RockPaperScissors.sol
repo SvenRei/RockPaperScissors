@@ -147,7 +147,7 @@ contract RockPaperScissors is Killable{
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
     require(session.expirationTime < now, "time to reveal the session-solution has exceeded");
     balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
-    emit LogCancelInitator(msg.sender, sessionID, balances[msg.sender]);
+    emit LogCancelChallengedPlayer(msg.sender, sessionID, balances[msg.sender]);
 
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
