@@ -1,138 +1,114 @@
-  pragma solidity ^0.5.8;
+  pragma solidity ^0.6.0;
 
 //for´killing
 import "./Killable.sol";
 //using openzeppelin
-import "@openzeppelin/contracts/ownership/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 contract RockPaperScissors is Killable{
 
-      /*
-      The concept for "hiding" the moves looks like this:
+  using SafeMath for uint;
 
-      The first player hashes his move along with a secret, the address from the contract, and his address. (like in the remittance project)
-      This hash is assumed to be the hash of the game session. Then the "challengedPlayer" can make his move if he knows the SessionID.
-      Then the initiator of the game can reveal the result because he enters the same data into the "revealSessionSolution" function as in the hash function.
-      Within this function, it is checked if the generated hash is the same as the sessionID.  If they are the same the result is announced and the winner gets the bet.
-      The winner can partially withdraw this prize.
-    */
+      uint constant maxGameTime = 7 * 1 days; //this is the max period!
 
-    using SafeMath for uint;
+  //enumerate the possible moves of the game
+  //https://solidity.readthedocs.io/en/v0.5.3/types.html#enums
+  enum Move{
+    noMove, //for waiting after setting up the game
+    rock,
+    paper,
+    scissors
+  }
 
-        uint constant maxGameTime = 7 * 1 days / 15; //this is the max period!
+  //struct for setting the data
+  //at the moment they can bet every amount they want
+  struct GameSession {
+    address initPlayer;
+    address challengedPlayer;
+    Move move;
+    uint expirationTime;
+    uint betInitPlayer;
+    uint betChallengedPlayer;
+  }
 
-    //enumerate the possible moves of the game
-    //https://solidity.readthedocs.io/en/v0.5.3/types.html#enums
-    enum Move{
-      noMove, //for waiting after setting up the game
-      rock,
-      paper,
-      scissors
-    }
+  //Set up events
+  event LogGameInit(bytes32 sessionID, address indexed sender, address indexed challengedPlayer, uint bet, uint expirationTime);
+  event LogGameAcceptance(bytes32 sessionID, address indexed sender, uint setAmount, uint expirationTime);
+  event LogCancelInitator(bytes32 sessionID, address indexed sender, uint bet);
+  event LogCancelChallengedPlayer(bytes32 sessionID, address indexed sender, uint bet);
+  event LogSessionSolution(bytes32 sessionID, address indexed sender, address indexed challengedPlayer, uint result, uint bet);
+  event LogWithdraw(address indexed sender, uint amount);
 
-    //struct for setting the data
-    //at the moment they can bet every amount they want
-    struct GameSession {
-      address initPlayer;
-      address challengedPlayer;
-      Move move;
-      uint expirationTime;
-      uint betInitPlayer;
-      uint betChallengedPlayer;
-    }
+  //setting up mappings
+  mapping(bytes32 => GameSession) public gameSessions; //gameSession --> sessionID
+  mapping(address => uint) public balances;
 
-    //Set up events
-    event LogGameInit(address indexed sender, address indexed challengedPlayer, uint bet, uint expirationTime);
-    event LogGameAcceptance(address indexed sender, uint setAmount, uint expirationTime);
-    event LogCancelInitator(address indexed sender, bytes32 hash, uint bet);
-    event LogCancelChallengedPlayer(address indexed sender, bytes32 hash, uint bet);
-    event LogSessionSolution(address indexed sender, address indexed challengedPlayer, uint result, uint bet);
-    event LogWithdraw(address indexed sender, uint amount);
-
-    //setting up mappings
-    mapping(bytes32 => GameSession) public gameSessions; //gameSession --> sessionID
-    mapping(address => uint) public balances;
-
-    constructor() public{
+  constructor() public{
     }
 
   //hash like in remittance
   //hash a secret, a move, the sender and the contract address
   function hash(bytes32 secret, Move move) public view returns(bytes32 sessionID){
     require(secret != bytes32(0), "cannot be 0");
-    require((uint(move) > uint(Move.noMove) && (uint(move) <= uint(Move.scissors))), "input == 0 || input > 3");
+    require((uint(move) > uint(Move.noMove)), "input == 0 || input > 3");
     sessionID = keccak256(abi.encodePacked(msg.sender, secret, move, address(this)));
   }
   //a function to get the winner of the game
   // Rock = 1
   // Paper = 2
   // Scissors = 3
-
-  //getting the winner of the game || At this and the following points I had big problems with enum, because the data format did not really fit..
   function getWinner(Move firstMove, Move secondMove) public pure returns (uint result){
-
-    if(firstMove == secondMove) return 0;
-
-    if((uint(firstMove) == uint(Move.rock) && uint(secondMove) == uint(Move.scissors)) ||
-       (uint(firstMove) == uint(Move.paper) && uint(secondMove) == uint(Move.rock)) ||
-       (uint(firstMove) == uint(Move.scissors) && uint(secondMove) == uint(Move.paper))) return 1;
-
-    if((uint(firstMove) == uint(Move.rock) && uint(secondMove) == uint(Move.paper)) ||
-       (uint(firstMove) == uint(Move.paper) && uint(secondMove) == uint(Move.scissors)) ||
-       (uint(firstMove) == uint(Move.scissors) && uint(secondMove) == uint(Move.rock))) return 2;
-  }
+    //https://stackoverflow.com/questions/26436657/rock-paper-scissors-in-java-using-modulus
+    result = (3 + uint(firstMove) - uint(secondMove) ) % 3 ;
+    }
 
   //function to initialize the game with the challenged Player and the set move! The move is set, because of the hash!
-  function initGame(address challengedPlayer, bytes32 sessionID) public payable {
+  function initGame(address challengedPlayer, bytes32 sessionID) public payable whenNotPaused {
+
+    require(sessionID != bytes32(0), "The sessionID can't be zero");
     //using the storage // https://medium.com/cryptologic/memory-and-storage-in-solidity-4052c788ca86
     GameSession storage session = gameSessions[sessionID];
-    //getting bet
-    uint amount = msg.value;
-    //set the requirements
-    require(sessionID != bytes32(0), "cannot be 0");
-    require(msg.sender != session.initPlayer, "This hash was already used or it is a running game");
-    require(challengedPlayer != address(0), "cannot be zero");
-    require(challengedPlayer != msg.sender, "cannot be the sender");
+    require(session.initPlayer == address(0), "This hash was already used or it is a running game");
+    require(challengedPlayer != address(0), "The address of the challengedPlayer can't be 0");
+    require(challengedPlayer != msg.sender, "The challengedPlayer can't be the initator");
 
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     //saving data into storage
     session.initPlayer = msg.sender;
     session.challengedPlayer = challengedPlayer;
-    session.betInitPlayer = amount;
+    session.betInitPlayer = msg.value;
     session.expirationTime = expirationTime;
     //event
-    emit LogGameInit(msg.sender, challengedPlayer ,amount, expirationTime);
+    emit LogGameInit(sessionID, msg.sender, challengedPlayer ,msg.value, expirationTime);
   }
 
   //the challengedplayer can accept the game, if he knows the sessionID.
   //the challengedPlayer has to set his move
   function acceptGame(bytes32 sessionID, Move move) public payable {
-    //getting bet
-    uint amount = msg.value;
     //requirements for the acceptance
-    require(sessionID != bytes32(0), "cannot be zero");
+    require(sessionID != bytes32(0), "The sessionID can't be zero");
     require((uint(move) > uint(Move.noMove)) && (uint(move) <= uint(Move.scissors)), "input == 0 || input > 2");
     GameSession storage session = gameSessions[sessionID];
     //check if the session has expired
-    require(now < session.expirationTime, "session has expired");
-    require(session.move == Move.noMove, "The challengedPlayer already set a move");
+    //require(now =< session.expirationTime, "session has expired");
+    require(session.move == Move.noMove, "The challengedPlayer has already set a move");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
     session.betChallengedPlayer = session.betChallengedPlayer.add(msg.value);
     session.expirationTime = expirationTime;
     //event
-    emit LogGameAcceptance(msg.sender, amount, expirationTime);
+    emit LogGameAcceptance(sessionID, msg.sender, msg.value, expirationTime);
   }
   //function to let the initator cancel the session
   function cancelSessionInitiator(bytes32 sessionID) public whenAlive {
     GameSession storage session = gameSessions[sessionID];
     address initPlayer = session.initPlayer;
-    //both participants can cancel the session
+
     require(initPlayer == msg.sender, "session can only be cancelled by the initator");
     require(session.expirationTime < now, "time-window to set a move for the challengedPlayer has exceeded");
     balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
-    emit LogCancelInitator(msg.sender, sessionID, balances[msg.sender]);
+    emit LogCancelInitator(sessionID, msg.sender , balances[msg.sender]);
 
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
@@ -145,9 +121,9 @@ contract RockPaperScissors is Killable{
     address challengedPlayer = session.challengedPlayer;
     require(challengedPlayer == msg.sender, "session can only be cancelled by the challengedPlayer");
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
-    require(session.expirationTime < now, "time to reveal the session-solution has exceeded");
+    require(session.expirationTime <= now, "time to reveal the session-solution has exceeded");
     balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
-    emit LogCancelChallengedPlayer(msg.sender, sessionID, balances[msg.sender]);
+    emit LogCancelChallengedPlayer(sessionID, msg.sender, balances[msg.sender]);
 
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
@@ -160,11 +136,11 @@ contract RockPaperScissors is Killable{
   //reveal the solution. This function can only be called by the initiator
   function revealSessionSolution(bytes32 sessionID, bytes32 secret, Move move) public payable whenAlive {
     GameSession storage session = gameSessions[sessionID];
+    require(sessionID == hash(secret, move), "not match");
     require(sessionID != bytes32(0), "cannot be zero");
     require(session.initPlayer == msg.sender, "is not the initator");
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
-    //check if the sessionID and the password and move are matching
-    require(sessionID == hash(secret, move), "not match");
+
     //get the winner through the getWinner-function
     uint result = getWinner(move, session.move);
     //getting the bet out of storage
@@ -185,7 +161,7 @@ contract RockPaperScissors is Killable{
     session.betChallengedPlayer = 0;
     session.move = Move.noMove;
 
-    emit LogSessionSolution(msg.sender, challengedPlayer, result, bet);
+    emit LogSessionSolution(sessionID, msg.sender, challengedPlayer, result, bet);
 
   }
   //withdraw like in remittance
