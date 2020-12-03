@@ -1,7 +1,7 @@
-pragma solidity ^0.5.8;
+pragma solidity ^0.6.0;
 
-import '@openzeppelin/contracts/ownership/Ownable.sol';
-import '@openzeppelin/contracts/lifecycle/Pausable.sol';
+import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/utils/Pausable.sol';
 
 contract Killable is Ownable, Pausable{
 
