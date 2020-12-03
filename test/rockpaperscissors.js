@@ -15,7 +15,7 @@ contract('RockPaperScissors', (accounts) => {
   //set pw1
   const secret = "beer1234";
   const secret1 = "test1234";
-  // build up a new Splitter contract before each test
+  // build up a new RPS contract before each test
   const SECONDS_IN_DAY = 86400
 
   const { toBN } = web3.utils;
@@ -35,7 +35,8 @@ contract('RockPaperScissors', (accounts) => {
   });
 
   it("test: should kill the contract", async () => {
-    await contractInstance.pause({from: sender});
+    await contractInstance._pause({from: sender});
+    await contractInstance.paused({from: sender});
     const killObj = await contractInstance.kill({ from: sender });
     const { logs } = killObj;
     const killEvent = killObj.logs[0];
@@ -47,15 +48,16 @@ contract('RockPaperScissors', (accounts) => {
    const amount = toWei("2", "Gwei");
    const move = 3;
    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
-   const maxGameTime = 7 * 86400 / 15;
+   const maxGameTime = 604800;
    const initGameObject = await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
    const getBlock = await web3.eth.getBlock('latest');
-   const getTime = getBlock.timestamp + maxGameTime; //get time + maxGameTime for checking LogDeploy-event
+   const getTime = (getBlock.timestamp) + (maxGameTime); //get time + maxGameTime for checking LogDeploy-event
 
 
    const { logs } = initGameObject;
    const initGameEvent = initGameObject.logs[0];
    truffleAssert.eventEmitted(initGameObject, "LogGameInit");
+   assert.strictEqual(initGameEvent.args.sessionID, sessionID, "wrong ID");
    assert.strictEqual(initGameEvent.args.sender, sender, "not the owner");
    assert.strictEqual(initGameEvent.args.challengedPlayer, one, "not the owner");
    assert.strictEqual(initGameEvent.args.bet.toString(), amount.toString(), "not the owner");
@@ -66,7 +68,7 @@ contract('RockPaperScissors', (accounts) => {
    const amount = toWei("2", "Gwei");
    const move = 3;
    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
-   const maxGameTime = 7 * 86400 / 15;
+   const maxGameTime = 604800;
 
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
@@ -75,7 +77,7 @@ contract('RockPaperScissors', (accounts) => {
    const acceptGameObject = await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
 
    const getBlock = await web3.eth.getBlock('latest');
-   const getTime = getBlock.timestamp + maxGameTime; //get time + maxGameTime for checking LogDeploy-event
+   const getTime = (getBlock.timestamp) + (maxGameTime); //get time + maxGameTime for checking LogDeploy-event
 
 
    const { logs } = acceptGameObject;
@@ -84,7 +86,22 @@ contract('RockPaperScissors', (accounts) => {
    assert.strictEqual(acceptGameEvent.args.sender, one, "not the challengedPlayer");
    assert.strictEqual(acceptGameEvent.args.setAmount.toString(), amount1.toString(), "not the owner");
    assert.strictEqual(acceptGameEvent.args.expirationTime.toString(), getTime.toString(), "latestBlock is not right");
+   //truffleAssert.prettyPrintEmittedEvents(acceptGameObject);
   });
+
+  it("test: Init a game two times should not be possible", async() => {
+    const amount = toWei("2", "Gwei");
+    const move = 3;
+    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const maxGameTime = 604800;
+
+    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
+
+
+    await truffleAssert.reverts(
+      contractInstance.initGame(one, sessionID, {from: sender, value: amount}),
+      "This hash was already used or it is a running game");
+   });
 
   it("test: accept a game two times should not be possible", async() => {
     const amount = toWei("2", "Gwei");
@@ -99,7 +116,7 @@ contract('RockPaperScissors', (accounts) => {
     await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
     await truffleAssert.reverts(
       contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1}),
-      "The challengedPlayer already set a move");
+      "The challengedPlayer has already set a move");
    });
 
   it("test: LogSessionSolution-event should be emitted", async() => {
@@ -111,11 +128,11 @@ contract('RockPaperScissors', (accounts) => {
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
    const amount1 = toWei("2", "Gwei");
-   const move1 =1;
+   const move1 =3;
    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
 
    const revealSessionObject = await contractInstance.revealSessionSolution(sessionID, web3.utils.toHex(secret), move, {from: sender});
-   const result = 0;
+   const result = 1;
    const amount2 = toWei("4", "Gwei");
    const { logs } = revealSessionObject;
    const revealSessionEvent = revealSessionObject.logs[0];
@@ -124,6 +141,8 @@ contract('RockPaperScissors', (accounts) => {
    assert.strictEqual(revealSessionEvent.args.challengedPlayer, one, "not the challengedPlayer");
    assert.strictEqual(revealSessionEvent.args.result.toString(), result.toString(), "result of the game");
    assert.strictEqual(revealSessionEvent.args.bet.toString(), amount2.toString(), "latestBlock is not right");
+
+   //truffleAssert.prettyPrintEmittedEvents(revealSessionObject);
  });
 
  it("test: LogCancelInitator-event should be emitted", async() => {
@@ -135,16 +154,16 @@ contract('RockPaperScissors', (accounts) => {
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
 
-   await helper.advanceTime(SECONDS_IN_DAY*1000);
+   await helper.advanceTime(SECONDS_IN_DAY*8);
 
    const cancelObject = await contractInstance.cancelSessionInitiator(sessionID , {from: sender});
    const { logs } = cancelObject;
    const cancelEvent = cancelObject.logs[0];
    truffleAssert.eventEmitted(cancelObject, "LogCancelInitator");
+   assert.strictEqual(cancelEvent.args.sessionID, sessionID, "wrong ID");
    assert.strictEqual(cancelEvent.args.sender, sender, "sender isn't right");
-   assert.strictEqual(cancelEvent.args.hash, sessionID, "wrong ID");
    assert.strictEqual(cancelEvent.args.bet.toString(),amount.toString() , "amount is not right");
-   //truffleAssert.prettyPrintEmittedEvents(cancelObject);
+   //
   });
 
   it("test: LogCancelChallengedPlayer-event should be emitted", async() => {
@@ -159,15 +178,15 @@ contract('RockPaperScissors', (accounts) => {
     const move1 =1;
     await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
 
-    await helper.advanceTime(SECONDS_IN_DAY*1000);
+    await helper.advanceTime(SECONDS_IN_DAY*8);
 
     const cancelObject = await contractInstance.cancelSessionChallengedPlayer(sessionID , {from: one});
     const { logs } = cancelObject;
     const cancelEvent = cancelObject.logs[0];
     const sum = toBN(amount).add(toBN(amount1));
     truffleAssert.eventEmitted(cancelObject, "LogCancelChallengedPlayer");
+    assert.strictEqual(cancelEvent.args.sessionID, sessionID, "wrong ID");
     assert.strictEqual(cancelEvent.args.sender, one, "sender isn't right");
-    assert.strictEqual(cancelEvent.args.hash, sessionID, "wrong ID");
     assert.strictEqual(cancelEvent.args.bet.toString(),sum.toString() , "amount is not right");
     //truffleAssert.prettyPrintEmittedEvents(cancelObject);
    });
@@ -207,4 +226,5 @@ contract('RockPaperScissors', (accounts) => {
 
 
      });
+
 });
