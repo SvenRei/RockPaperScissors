@@ -55,11 +55,6 @@ contract RockPaperScissors is Killable{
     sessionID = keccak256(abi.encodePacked(secret, move, address(this)));
   }
 
-  function checkHash(bytes32 sessionID, bytes32 secret, Move move) public view returns(bytes32 correctHash){
-    correctHash = hash(secret, move);
-    require(sessionID == correctHash, "the data entered do not match");
-    return correctHash;
-  }
   //msg.sender,
   //a function to get the winner of the game
   // Rock = 1
@@ -108,9 +103,8 @@ contract RockPaperScissors is Killable{
   //function to let the initator cancel the session
   function cancelSessionInitiator(bytes32 sessionID) public whenAlive {
     GameSession storage session = gameSessions[sessionID];
-    address initPlayer = session.initPlayer;
 
-    //require(initPlayer == msg.sender, "session can only be cancelled by the initator");
+    require(session.move == Move.noMove, "the challengedPlayer has set a move");
     require(session.expirationTime < now, "time-window to set a move for the challengedPlayer has exceeded");
     balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
     emit LogCancelInitator(sessionID, msg.sender , balances[msg.sender]);
@@ -137,15 +131,14 @@ contract RockPaperScissors is Killable{
     session.move = Move.noMove;
 
   }
-  //function to let the challengedPlayer cancel
+
   //reveal the solution. This function can only be called by the initiator
-  function revealSessionSolution(bytes32 sessionID, bytes32 secret, Move move) public payable whenAlive {
+  function revealSessionSolution(bytes32 secret, Move move) public payable whenAlive {
+    bytes32 sessionID = hash(secret, move);
     GameSession storage session = gameSessions[sessionID];
-    require(sessionID == checkHash(sessionID, secret, move), "The input values do not result in the SessionID");
     require(session.initPlayer == msg.sender, "is not the initator");
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
 
-    //get the winner through the getWinner-function
     uint result = getWinner(move, session.move);
     //getting the bet out of storage
     uint betInitPlayer = session.betInitPlayer;
@@ -173,7 +166,7 @@ contract RockPaperScissors is Killable{
   //withdraw like in remittance
   function withdraw(uint withdrawBalance) public {
        require(withdrawBalance > 0, "A higher balance than zero, is a prerequisite");
-       require(withdrawBalance <= balances[msg.sender], "amount > balance[msg.sender]");
+       require(withdrawBalance <= balances[msg.sender], "withdrawBalance > balance[msg.sender]");
        emit LogWithdraw(msg.sender, withdrawBalance);
        balances[msg.sender] = balances[msg.sender] - withdrawBalance;
        //transferring the money to the accounts
