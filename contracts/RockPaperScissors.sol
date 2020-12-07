@@ -10,7 +10,7 @@ contract RockPaperScissors is Killable{
 
   using SafeMath for uint;
 
-      uint constant maxGameTime = 7 * 1 days; //this is the max period!
+      uint constant maxGameTime = 7 days; //this is the max period!
 
   //enumerate the possible moves of the game
   //https://solidity.readthedocs.io/en/v0.5.3/types.html#enums
@@ -51,9 +51,16 @@ contract RockPaperScissors is Killable{
   //hash a secret, a move, the sender and the contract address
   function hash(bytes32 secret, Move move) public view returns(bytes32 sessionID){
     require(secret != bytes32(0), "cannot be 0");
-    require((uint(move) > uint(Move.noMove)), "input == 0 || input > 3");
-    sessionID = keccak256(abi.encodePacked(msg.sender, secret, move, address(this)));
+    require((uint(move) > uint(Move.noMove)), "no valid move");
+    sessionID = keccak256(abi.encodePacked(secret, move, address(this)));
   }
+
+  function checkHash(bytes32 sessionID, bytes32 secret, Move move) public view returns(bytes32 correctHash){
+    correctHash = hash(secret, move);
+    require(sessionID == correctHash, "the data entered do not match");
+    return correctHash;
+  }
+  //msg.sender,
   //a function to get the winner of the game
   // Rock = 1
   // Paper = 2
@@ -61,7 +68,7 @@ contract RockPaperScissors is Killable{
   function getWinner(Move firstMove, Move secondMove) public pure returns (uint result){
     //https://stackoverflow.com/questions/26436657/rock-paper-scissors-in-java-using-modulus
     result = (3 + uint(firstMove) - uint(secondMove) ) % 3 ;
-    }
+  }
 
   //function to initialize the game with the challenged Player and the set move! The move is set, because of the hash!
   function initGame(address challengedPlayer, bytes32 sessionID) public payable whenNotPaused {
@@ -87,15 +94,13 @@ contract RockPaperScissors is Killable{
   //the challengedPlayer has to set his move
   function acceptGame(bytes32 sessionID, Move move) public payable {
     //requirements for the acceptance
-    require(sessionID != bytes32(0), "The sessionID can't be zero");
+    //require(sessionID != bytes32(0), "The sessionID can't be zero");
     require((uint(move) > uint(Move.noMove)) && (uint(move) <= uint(Move.scissors)), "input == 0 || input > 2");
     GameSession storage session = gameSessions[sessionID];
-    //check if the session has expired
-    //require(now =< session.expirationTime, "session has expired");
     require(session.move == Move.noMove, "The challengedPlayer has already set a move");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
-    session.betChallengedPlayer = session.betChallengedPlayer.add(msg.value);
+    session.betChallengedPlayer = msg.value;
     session.expirationTime = expirationTime;
     //event
     emit LogGameAcceptance(sessionID, msg.sender, msg.value, expirationTime);
@@ -105,7 +110,7 @@ contract RockPaperScissors is Killable{
     GameSession storage session = gameSessions[sessionID];
     address initPlayer = session.initPlayer;
 
-    require(initPlayer == msg.sender, "session can only be cancelled by the initator");
+    //require(initPlayer == msg.sender, "session can only be cancelled by the initator");
     require(session.expirationTime < now, "time-window to set a move for the challengedPlayer has exceeded");
     balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
     emit LogCancelInitator(sessionID, msg.sender , balances[msg.sender]);
@@ -136,19 +141,20 @@ contract RockPaperScissors is Killable{
   //reveal the solution. This function can only be called by the initiator
   function revealSessionSolution(bytes32 sessionID, bytes32 secret, Move move) public payable whenAlive {
     GameSession storage session = gameSessions[sessionID];
-    require(sessionID == hash(secret, move), "not match");
-    require(sessionID != bytes32(0), "cannot be zero");
+    require(sessionID == checkHash(sessionID, secret, move), "The input values do not result in the SessionID");
     require(session.initPlayer == msg.sender, "is not the initator");
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
 
     //get the winner through the getWinner-function
     uint result = getWinner(move, session.move);
     //getting the bet out of storage
-    uint bet = session.betInitPlayer + session.betChallengedPlayer;
+    uint betInitPlayer = session.betInitPlayer;
+    uint betChallengedPlayer = session.betChallengedPlayer;
+    uint bet = (betInitPlayer).add(betChallengedPlayer);
     address challengedPlayer = session.challengedPlayer;
     if(result == 0){
-            balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer);
-            balances[challengedPlayer] = balances[challengedPlayer].add(session.betChallengedPlayer);
+            balances[msg.sender] = balances[msg.sender].add(betInitPlayer);
+            balances[challengedPlayer] = balances[challengedPlayer].add(betChallengedPlayer);
     } else if  (result == 1) {
       balances[msg.sender] = balances[msg.sender].add(bet);
     } else if (result == 2) {
@@ -165,13 +171,13 @@ contract RockPaperScissors is Killable{
 
   }
   //withdraw like in remittance
-  function withdraw(uint withdrawAmount) public {
-       require(withdrawAmount > 0, "A higher balance than zero, is a prerequisite");
-       require(withdrawAmount <= balances[msg.sender], "amount > balance[msg.sender]");
-       emit LogWithdraw(msg.sender, withdrawAmount);
-       balances[msg.sender] = balances[msg.sender] - withdrawAmount;
+  function withdraw(uint withdrawBalance) public {
+       require(withdrawBalance > 0, "A higher balance than zero, is a prerequisite");
+       require(withdrawBalance <= balances[msg.sender], "amount > balance[msg.sender]");
+       emit LogWithdraw(msg.sender, withdrawBalance);
+       balances[msg.sender] = balances[msg.sender] - withdrawBalance;
        //transferring the money to the accounts
-       (bool success, ) = msg.sender.call.value(withdrawAmount)("");
+       (bool success, ) = msg.sender.call.value(withdrawBalance)("");
        require(success, "Transfer failed");
  }
 
