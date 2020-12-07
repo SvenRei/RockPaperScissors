@@ -133,7 +133,7 @@ contract('RockPaperScissors', (accounts) => {
    const move1 =3;
    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
 
-   const revealSessionObject = await contractInstance.revealSessionSolution(sessionID, web3.utils.toHex(secret), move, {from: sender});
+   const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move, {from: sender});
    const result = 1;
    const amount2 = toWei("4", "Gwei");
    const { logs } = revealSessionObject;
@@ -152,12 +152,8 @@ contract('RockPaperScissors', (accounts) => {
    const move = 3;
    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
    const maxGameTime = 604800;
-
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
-
-
    await helper.advanceTime(SECONDS_IN_DAY*8);
-
    const cancelObject = await contractInstance.cancelSessionInitiator(sessionID , {from: sender});
    const { logs } = cancelObject;
    const cancelEvent = cancelObject.logs[0];
@@ -165,9 +161,6 @@ contract('RockPaperScissors', (accounts) => {
    assert.strictEqual(cancelEvent.args.sessionID, sessionID, "wrong ID");
    assert.strictEqual(cancelEvent.args.sender, sender, "sender isn't right");
    assert.strictEqual(cancelEvent.args.bet.toString(),amount.toString() , "amount is not right");
-
-
-   //
   });
 
   it("test: LogCancelInitiator-event should be emitted and the Initator get's the money back", async() => {
@@ -175,9 +168,7 @@ contract('RockPaperScissors', (accounts) => {
    const move = 3;
    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
    const maxGameTime = 604800;
-
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
-
    await helper.advanceTime(SECONDS_IN_DAY*8);
 
    const cancelObject = await contractInstance.cancelSessionInitiator(sessionID , {from: sender});
@@ -298,7 +289,7 @@ contract('RockPaperScissors', (accounts) => {
     const amount1 = toWei("2", "Gwei");
     const move1 =3;
     await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
-    await contractInstance.revealSessionSolution(sessionID, web3.utils.toHex(secret), move, {from: sender});
+    await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move, {from: sender});
     const withdrawAmount = toWei("4", "Gwei");
     const balanceBefore = await web3.eth.getBalance(sender);
 
@@ -324,4 +315,62 @@ contract('RockPaperScissors', (accounts) => {
 
      });
 
+  it("test: If the result is 0, both player should get their money", async() => {
+   const amount = toWei("2", "Gwei");
+   const move = 1;
+   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const maxGameTime = 7 * 86400 / 15;
+   await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
+
+   const amount1 = toWei("2", "Gwei");
+   const move1 =1;
+   await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+   await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move, {from: sender});
+   
+   //initPlayer
+   const withdrawAmount = toWei("2", "Gwei");
+   const balanceBefore = await web3.eth.getBalance(sender);
+
+   const withdrawObject = await contractInstance.withdraw(withdrawAmount , {from: sender});
+   const { logs } = withdrawObject;
+   const withdrawEvent = withdrawObject.logs[0];
+   truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
+   assert.strictEqual(withdrawEvent.args.sender, sender, "sender isn't right");
+   assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawAmount.toString(), "hash problem");
+
+   const tx = await web3.eth.getTransaction(withdrawObject.tx);
+   //getting the receipt for calculating gasCost
+   const receipt = withdrawObject.receipt;
+   //calculating gasCost
+   const gasCost = toBN(tx.gasPrice).mul(toBN(receipt.gasUsed));
+   //calculating expectetbalanceafter
+   const expectedBalanceAfter = toBN(balanceBefore).add(toBN(toWei("2", "Gwei"))).sub(toBN(gasCost));
+   //getting the balance after withdraw
+   const balanceAfter = await web3.eth.getBalance(sender);
+   //test if expectedBalanceAfter == balanceAfter
+   assert.strictEqual(expectedBalanceAfter.toString(), balanceAfter.toString(), "Balance of one isn't right");
+
+   //challengedPlayer
+   const balanceBefore1 = await web3.eth.getBalance(one);
+
+   const withdrawObject1 = await contractInstance.withdraw(withdrawAmount , {from: one});
+   const { logs1 } = withdrawObject1;
+   const withdrawEvent1 = withdrawObject1.logs[0];
+   truffleAssert.eventEmitted(withdrawObject1, "LogWithdraw");
+   assert.strictEqual(withdrawEvent1.args.sender, one, "sender isn't right");
+   assert.strictEqual(withdrawEvent1.args.amount.toString(), withdrawAmount.toString(), "hash problem");
+
+   const tx1 = await web3.eth.getTransaction(withdrawObject1.tx);
+   //getting the receipt for calculating gasCost
+   const receipt1 = withdrawObject1.receipt;
+   //calculating gasCost
+   const gasCost1 = toBN(tx1.gasPrice).mul(toBN(receipt1.gasUsed));
+   //calculating expectetbalanceafter
+   const expectedBalanceAfter1 = toBN(balanceBefore1).add(toBN(toWei("2", "Gwei"))).sub(toBN(gasCost));
+   //getting the balance after withdraw
+   const balanceAfter1 = await web3.eth.getBalance(one);
+   //test if expectedBalanceAfter == balanceAfter
+   assert.strictEqual(expectedBalanceAfter1.toString(), balanceAfter1.toString(), "Balance of one isn't right");
+
+    });
 });
