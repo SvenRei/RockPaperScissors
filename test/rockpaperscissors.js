@@ -9,8 +9,14 @@ contract('RockPaperScissors', (accounts) => {
   //setting up the instance
   let contractInstance;
 
-  //setting up three accounts
+  //setting up five accounts
   const [sender, one, two, three, four] = accounts;
+
+  //object for move
+  var move = new Object();
+  move.Rock = 1;
+  move.Paper = 2;
+  move.Scissor = 3;
 
   //set pw1
   const secret = "beer1234";
@@ -44,17 +50,15 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: LogGameInit-event should be emitted", async() => {
    const amount = toWei("2", "Gwei");
-   const move = 3;
-   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
    const maxGameTime = 604800;
    const initGameObject = await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
-   const tx = await web3.eth.getTransaction(initGameObject.tx);
-   const getBlock = await web3.eth.getBlock(tx.blockNumber);
+   const getBlock = await web3.eth.getBlock(initGameObject.receipt.blockNumber);
    const getTime = (getBlock.timestamp) + (maxGameTime);
    /*
-   const getBlock = await web3.eth.getBlock('latest');
-   const getTime = (getBlock.timestamp) + (maxGameTime); //get time + maxGameTime for checking LogDeploy-event
+   const tx = await web3.eth.getTransaction(initGameObject.tx);
+   const getBlock = await web3.eth.getBlock(tx.blockNumber);
    */
 
    const { logs } = initGameObject;
@@ -69,17 +73,14 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: LogGameAcceptance-event should be emitted", async() => {
    const amount = toWei("2", "Gwei");
-   const move = 3;
-   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
    const maxGameTime = 604800;
 
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
    const amount1 = toWei("2", "Gwei");
-   const move1 =2;
-   const acceptGameObject = await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+   const acceptGameObject = await contractInstance.acceptGame(sessionID, move.Paper ,{from: one, value: amount1});
 
-   const tx = await web3.eth.getTransaction(acceptGameObject.tx);
-   const getBlock = await web3.eth.getBlock(tx.blockNumber);
+   const getBlock = await web3.eth.getBlock(acceptGameObject.receipt.blockNumber);
    const getTime = (getBlock.timestamp) + (maxGameTime);
 
    const { logs } = acceptGameObject;
@@ -93,8 +94,7 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: Init a game two times should not be possible", async() => {
     const amount = toWei("2", "Gwei");
-    const move = 3;
-    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
     const maxGameTime = 604800;
 
     await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
@@ -107,33 +107,29 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: accept a game two times should not be possible", async() => {
     const amount = toWei("2", "Gwei");
-    const move = 3;
-    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
     const maxGameTime = 7 * 86400 / 15;
 
     await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
     const amount1 = toWei("2", "Gwei");
-    const move1 =2;
-    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+    await contractInstance.acceptGame(sessionID, move.Rock ,{from: one, value: amount1});
     await truffleAssert.reverts(
-      contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1}),
+      contractInstance.acceptGame(sessionID, move.Rock ,{from: one, value: amount1}),
       "The challengedPlayer has already set a move");
    });
 
   it("test: LogSessionSolution-event should be emitted", async() => {
    const amount = toWei("2", "Gwei");
-   const move = 1;
-   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Rock);
    const maxGameTime = 7 * 86400 / 15;
 
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
    const amount1 = toWei("2", "Gwei");
-   const move1 =3;
-   await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+   await contractInstance.acceptGame(sessionID, move.Scissor ,{from: one, value: amount1});
 
-   const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move, {from: sender});
+   const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: sender});
    const result = 1;
    const amount2 = toWei("4", "Gwei");
    const { logs } = revealSessionObject;
@@ -149,8 +145,7 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: LogCancelInitiator-event should be emitted", async() => {
    const amount = toWei("2", "Gwei");
-   const move = 3;
-   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
    const maxGameTime = 604800;
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
    await helper.advanceTime(SECONDS_IN_DAY*8);
@@ -165,8 +160,7 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: LogCancelInitiator-event should be emitted and the Initator get's the money back", async() => {
    const amount = toWei("2", "Gwei");
-   const move = 3;
-   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
    const maxGameTime = 604800;
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
    await helper.advanceTime(SECONDS_IN_DAY*8);
@@ -207,15 +201,13 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: LogCancelChallengedPlayer-event should be emitted", async() => {
     const amount = toWei("2", "Gwei");
-    const move = 3;
-    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
     const maxGameTime = 7 * 86400 / 15;
 
     await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
     const amount1 = toWei("2", "Gwei");
-    const move1 =1;
-    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+    await contractInstance.acceptGame(sessionID, move.Rock ,{from: one, value: amount1});
 
     await helper.advanceTime(SECONDS_IN_DAY*8);
 
@@ -232,15 +224,13 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: LogCancelChallengedPlayer-event should be emitted and the challengedPlayer get's the money back", async() => {
      const amount = toWei("2", "Gwei");
-     const move = 3;
-     const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+     const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Scissor);
      const maxGameTime = 7 * 86400 / 15;
 
      await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
      const amount1 = toWei("2", "Gwei");
-     const move1 =1;
-     await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
+     await contractInstance.acceptGame(sessionID, move.Rock ,{from: one, value: amount1});
 
      await helper.advanceTime(SECONDS_IN_DAY*8);
 
@@ -281,15 +271,13 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: LogWithdraw-event should be emitted | tx fee = gasUsed x gasPrice", async() => {
     const amount = toWei("2", "Gwei");
-    const move = 1;
-    const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+    const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Rock);
     const maxGameTime = 7 * 86400 / 15;
     await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
     const amount1 = toWei("2", "Gwei");
-    const move1 =3;
-    await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
-    await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move, {from: sender});
+    await contractInstance.acceptGame(sessionID, move.Scissor ,{from: one, value: amount1});
+    await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: sender});
     const withdrawAmount = toWei("4", "Gwei");
     const balanceBefore = await web3.eth.getBalance(sender);
 
@@ -317,16 +305,14 @@ contract('RockPaperScissors', (accounts) => {
 
   it("test: If the result is 0, both player should get their money", async() => {
    const amount = toWei("2", "Gwei");
-   const move = 1;
-   const sessionID = await contractInstance.hash(web3.utils.toHex(secret), move);
+   const sessionID = await contractInstance.hash(sender, web3.utils.toHex(secret), move.Rock);
    const maxGameTime = 7 * 86400 / 15;
    await contractInstance.initGame(one, sessionID, {from: sender, value: amount});
 
    const amount1 = toWei("2", "Gwei");
-   const move1 =1;
-   await contractInstance.acceptGame(sessionID, move1 ,{from: one, value: amount1});
-   await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move, {from: sender});
-   
+   await contractInstance.acceptGame(sessionID, move.Rock ,{from: one, value: amount1});
+   await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: sender});
+
    //initPlayer
    const withdrawAmount = toWei("2", "Gwei");
    const balanceBefore = await web3.eth.getBalance(sender);
