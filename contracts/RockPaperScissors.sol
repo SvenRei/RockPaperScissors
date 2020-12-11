@@ -49,10 +49,11 @@ contract RockPaperScissors is Killable{
 
   //hash like in remittance
   //hash a secret, a move, the sender and the contract address
-  function hash(bytes32 secret, Move move) public view returns(bytes32 sessionID){
+  function hash(address sender, bytes32 secret, Move move) public view returns(bytes32 sessionID){
+    require(sender != address(0x0), "The address can't be 0x0");
     require(secret != bytes32(0), "cannot be 0");
     require((uint(move) > uint(Move.noMove)), "no valid move");
-    sessionID = keccak256(abi.encodePacked(secret, move, address(this)));
+    sessionID = keccak256(abi.encodePacked(sender, secret, move, address(this)));
   }
 
   //msg.sender,
@@ -90,7 +91,8 @@ contract RockPaperScissors is Killable{
   function acceptGame(bytes32 sessionID, Move move) public payable {
     //requirements for the acceptance
     //require(sessionID != bytes32(0), "The sessionID can't be zero");
-    require((uint(move) > uint(Move.noMove)) && (uint(move) <= uint(Move.scissors)), "input == 0 || input > 2");
+    require(msg.value > 0, "the stake of the ChallegendPlayer must be greater than 0");
+    require((uint(Move.noMove) < uint(move)) && (uint(move) <= uint(Move.scissors)), "input == 0 || input > 2");
     GameSession storage session = gameSessions[sessionID];
     require(session.move == Move.noMove, "The challengedPlayer has already set a move");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
@@ -103,9 +105,9 @@ contract RockPaperScissors is Killable{
   //function to let the initator cancel the session
   function cancelSessionInitiator(bytes32 sessionID) public whenAlive {
     GameSession storage session = gameSessions[sessionID];
-
+    require(session.initPlayer == msg.sender, "session can only be cancelled by the initator"")
     require(session.move == Move.noMove, "the challengedPlayer has set a move");
-    require(session.expirationTime < now, "time-window to set a move for the challengedPlayer has exceeded");
+    require(session.expirationTime <= now, "time-window to set a move for the challengedPlayer has exceeded");
     balances[msg.sender] = balances[msg.sender].add(session.betInitPlayer).add(session.betChallengedPlayer);
     emit LogCancelInitator(sessionID, msg.sender , balances[msg.sender]);
 
@@ -134,7 +136,7 @@ contract RockPaperScissors is Killable{
 
   //reveal the solution. This function can only be called by the initiator
   function revealSessionSolution(bytes32 secret, Move move) public payable whenAlive {
-    bytes32 sessionID = hash(secret, move);
+    bytes32 sessionID = hash(msg.sender, secret, move);
     GameSession storage session = gameSessions[sessionID];
     require(session.initPlayer == msg.sender, "is not the initator");
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
