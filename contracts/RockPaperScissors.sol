@@ -32,16 +32,14 @@ contract RockPaperScissors is Killable{
     uint betChallengedPlayer;
   }
 
-  //Set up events
-  event LogGameInit(bytes32 sessionID, address indexed sender, address indexed challengedPlayer, uint bet, uint expirationTime);
-  event LogGameAcceptance(bytes32 sessionID, address indexed sender, uint setAmount, uint expirationTime);
-  event LogCancelInitator(bytes32 sessionID, address indexed sender, uint bet);
-  event LogCancelChallengedPlayer(bytes32 sessionID, address indexed sender, uint bet);
-  event LogSessionSolution(bytes32 sessionID, address indexed sender, address indexed challengedPlayer, uint result, uint bet);
+  event LogGameInit(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, uint bet, uint expirationTime);
+  event LogGameAcceptance(bytes32 indexed sessionID, address indexed sender, uint setAmount, uint expirationTime);
+  event LogCancelInitator(bytes32 indexed sessionID, address indexed sender, uint bet);
+  event LogCancelChallengedPlayer(bytes32 indexed sessionID, address indexed sender, uint bet);
+  event LogSessionSolution(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, uint result, uint bet);
   event LogWithdraw(address indexed sender, uint amount);
 
-  //setting up mappings
-  mapping(bytes32 => GameSession) public gameSessions; //gameSession --> sessionID
+  mapping(bytes32 => GameSession) public gameSessions;
   mapping(address => uint) public balances;
 
   constructor() public{
@@ -76,7 +74,6 @@ contract RockPaperScissors is Killable{
     require(challengedPlayer != msg.sender, "The challengedPlayer can't be the initator");
 
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
-    //saving data into storage
     session.initPlayer = msg.sender;
     session.challengedPlayer = challengedPlayer;
     session.betInitPlayer = msg.value;
@@ -89,9 +86,9 @@ contract RockPaperScissors is Killable{
   //the challengedPlayer has to set his move
   function acceptGame(bytes32 sessionID, Move move) public payable whenNotPaused {
     //requirements for the acceptance
-    require(msg.value > 0, "the stake of the ChallegendPlayer must be greater than 0");
     require((uint(Move.noMove) < uint(move)) && (uint(move) <= uint(Move.scissors)), "input == 0 || input > 3");
     GameSession storage session = gameSessions[sessionID];
+    require(msg.value >= session.betInitPlayer, "The input is smaller than with the InitPlayer");
     require(session.move == Move.noMove, "The challengedPlayer has already set a move");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
@@ -161,14 +158,15 @@ contract RockPaperScissors is Killable{
 
   }
 
-  function withdraw(uint withdrawBalance) public {
-       require(withdrawBalance > 0, "A higher balance than zero, is a prerequisite");
-       require(withdrawBalance <= balances[msg.sender], "withdrawBalance > balance[msg.sender]");
-       emit LogWithdraw(msg.sender, withdrawBalance);
-       balances[msg.sender] = balances[msg.sender] - withdrawBalance;
-       //transferring the money to the accounts
-       (bool success, ) = msg.sender.call.value(withdrawBalance)("");
-       require(success, "Transfer failed");
+  function withdraw(uint withdrawDelta) public {
+     uint balance = balances[msg.sender];
+     require(withdrawDelta > 0, "A higher balance than zero, is a prerequisite");
+     require(withdrawDelta <= balance, "withdrawBalance > balance[msg.sender]");
+     emit LogWithdraw(msg.sender, withdrawDelta);
+     balances[msg.sender] = balance.sub(withdrawDelta);
+     //transferring the money to the accounts
+     (bool success, ) = msg.sender.call.value(withdrawDelta)("");
+     require(success, "Transfer failed");
  }
 
 }
