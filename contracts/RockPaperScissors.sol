@@ -86,9 +86,9 @@ contract RockPaperScissors is Killable{
   //the challengedPlayer has to set his move
   function acceptGame(bytes32 sessionID, Move move) public payable whenNotPaused {
     //requirements for the acceptance
-    require((uint(Move.noMove) < uint(move)) && (uint(move) <= uint(Move.scissors)), "input == 0 || input > 3");
+    require((uint(Move.noMove) < uint(move)), "The challengedPlayer is not allowed to set NoMove");
     GameSession storage session = gameSessions[sessionID];
-    require(msg.value >= session.betInitPlayer, "The input is smaller than with the InitPlayer");
+    require(msg.value == session.betInitPlayer, "The entered value is not equal to that of the initiator");
     require(session.move == Move.noMove, "The challengedPlayer has already set a move");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
@@ -110,7 +110,6 @@ contract RockPaperScissors is Killable{
     session.challengedPlayer = address(0x0);
     session.betInitPlayer = 0;
     session.betChallengedPlayer = 0;
-    session.move = Move.noMove;
   }
 
   function cancelSessionChallengedPlayer(bytes32 sessionID) public whenAlive {
@@ -132,9 +131,10 @@ contract RockPaperScissors is Killable{
   function revealSessionSolution(bytes32 secret, Move move) public payable whenAlive {
     bytes32 sessionID = hash(msg.sender, secret, move);
     GameSession storage session = gameSessions[sessionID];
-    require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
+    Move moveChallengedPlayer = session.move;
+    require(moveChallengedPlayer != Move.noMove, "challengedPlayer has not yet carried out a move");
 
-    uint result = getWinner(move, session.move);
+    uint result = getWinner(move, moveChallengedPlayer);
     uint betInitPlayer = session.betInitPlayer;
     uint betChallengedPlayer = session.betChallengedPlayer;
     uint bet = (betInitPlayer).add(betChallengedPlayer);
