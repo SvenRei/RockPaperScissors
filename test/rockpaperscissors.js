@@ -19,6 +19,13 @@ const move = {
   Test: 4
 };
 
+//object for result
+const result = {
+  tie: 0,
+  initPlayerWins: 1,
+  challengedPlayerWins: 2
+};
+
   //set pw1
   const secret = "beer1234";
   const secret1 = "test1234";
@@ -149,14 +156,13 @@ const move = {
 
     const getBlockNumber = await web3.eth.getBlock(acceptGameObject.receipt.blockNumber);
     const getTime = (getBlockNumber.timestamp) + (SECONDS_IN_DAY*7);
-    const totalBets = toWei("4", "Gwei");
 
     const resultTest = await contractInstance.gameSessions(sessionID);
     assert.strictEqual(resultTest.initPlayer.toString(), initPlayer.toString(), "not the initPlayer");
     assert.strictEqual(resultTest.challengedPlayer.toString(), challengedPlayer.toString(), "not the challengedPlayer");
     assert.strictEqual(resultTest.move.toString(), move.Paper.toString(), "not the right move");
     assert.strictEqual(resultTest.expirationTime.toString(), getTime.toString(), "expirationTime is not right");
-    assert.strictEqual(resultTest.bet.toString(), totalBets.toString(), "not the right bet of the initPlayer");
+    assert.strictEqual(resultTest.bet.toString(), betInitPlayer.toString(), "not the right bet of the initPlayer");
 
   });
 
@@ -192,20 +198,16 @@ const move = {
     await contractInstance.acceptGame(sessionID, move.Scissor ,{from: challengedPlayer, value: betChallengedPlayer});
 
     const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: initPlayer});
-    //the result is the
-    // 0 = a tie
-    // 1 = initPlayer wins
-    // 2 = challengedPlayer wins
-    const result = 1;
-    const prize = toWei("4", "Gwei");
+
     const { logs } = revealSessionObject;
     const revealSessichallengedPlayervent = revealSessionObject.logs[0];
     truffleAssert.eventEmitted(revealSessionObject, "LogSessionSolution");
     assert.strictEqual(revealSessichallengedPlayervent.args.sender, initPlayer, "not the initator");
     assert.strictEqual(revealSessichallengedPlayervent.args.challengedPlayer, challengedPlayer, "not the challengedPlayer");
-    assert.strictEqual(revealSessichallengedPlayervent.args.result.toString(), result.toString(), "result of the game");
-    assert.strictEqual(revealSessichallengedPlayervent.args.bet.toString(), prize.toString(), "the prize is not right");
+    assert.strictEqual(revealSessichallengedPlayervent.args.result.toString(), result.initPlayerWins.toString(), "result of the game");
+    assert.strictEqual(revealSessichallengedPlayervent.args.bet.toString(), betInitPlayer.toString(), "the prize is not right");
  });
+
 
   it("test: Storage should be cleared within the LogSessionSolution", async() => {
     const betInitPlayer = toWei("2", "Gwei");
@@ -216,7 +218,7 @@ const move = {
     const betChallengedPlayer = toWei("2", "Gwei");
     await contractInstance.acceptGame(sessionID, move.Scissor ,{from: challengedPlayer, value: betChallengedPlayer});
 
-    const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: initPlayer});
+    const revealSessionObject = await contractInstance.revealSessionSolution(toHex(secret), move.Rock, {from: initPlayer});
 
     const storageClearedObject = await contractInstance.gameSessions(sessionID);
     assert.strictEqual(storageClearedObject.initPlayer.toString(), initPlayer.toString(), "not the initPlayer");
@@ -465,7 +467,7 @@ const move = {
 
     const betChallengedPlayer = toWei("2", "Gwei");
     await contractInstance.acceptGame(sessionID, move.Scissor ,{from: challengedPlayer, value: betChallengedPlayer});
-    const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: initPlayer});
+    const revealSessionObject = await contractInstance.revealSessionSolution(toHex(secret), move.Rock, {from: initPlayer});
     const withdrawDelta = toWei("4", "Gwei");
     const balanceBefore = await web3.eth.getBalance(initPlayer, revealSessionObject.receipt.blockNumber);
 
@@ -504,7 +506,7 @@ const move = {
 
     const betChallengedPlayer = toWei("2", "Gwei");
     await contractInstance.acceptGame(sessionID, move.Rock ,{from: challengedPlayer, value: betChallengedPlayer});
-    const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: initPlayer});
+    const revealSessionObject = await contractInstance.revealSessionSolution(toHex(secret), move.Rock, {from: initPlayer});
      //initPlayer
     const withdrawDelta = toWei("2", "Gwei");
     const balanceBefore = await web3.eth.getBalance(initPlayer, revealSessionObject.receipt.blockNumber);
@@ -549,5 +551,48 @@ const move = {
     const balanceAfter1 = await web3.eth.getBalance(challengedPlayer, receipt1.blockNumber);
     //test if expectedBalanceAfter == balanceAfter
     assert.strictEqual(expectedBalanceAfter1.toString(), balanceAfter1.toString(), "Balance of challengedPlayer isn't right");
+  });
+
+
+   it("test: The winnings from two different games should be able to be withdrawn from the contract in one withdrawal.", async() => {
+     const betInitPlayer = toWei("2", "Gwei");
+     const sessionID = await contractInstance.hash(initPlayer, toHex(secret), move.Rock);
+
+     await contractInstance.initGame(challengedPlayer, sessionID, {from: initPlayer, value: betInitPlayer});
+
+     const betChallengedPlayer = toWei("2", "Gwei");
+     await contractInstance.acceptGame(sessionID, move.Scissor ,{from: challengedPlayer, value: betChallengedPlayer});
+     await contractInstance.revealSessionSolution(web3.utils.toHex(secret), move.Rock, {from: initPlayer});
+
+     const betInitPlayer1 = toWei("4", "Gwei");
+     const sessionID1 = await contractInstance.hash(initPlayer, toHex(secret1), move.Rock);
+     await contractInstance.initGame(two, sessionID1, {from: initPlayer, value: betInitPlayer1});
+     const betChallengedPlayer1 = toWei("4", "Gwei");
+     await contractInstance.acceptGame(sessionID1, move.Scissor ,{from: two, value: betChallengedPlayer1});
+     const revealSessionObject = await contractInstance.revealSessionSolution(web3.utils.toHex(secret1), move.Rock, {from: initPlayer});
+
+     const withdrawDelta = toWei("12", "Gwei");
+     const balanceBefore = await web3.eth.getBalance(initPlayer, revealSessionObject.receipt.blockNumber);
+
+     const withdrawObject = await contractInstance.withdraw(withdrawDelta , {from: initPlayer});
+     const {logs} = withdrawObject;
+     const withdrawEvent = withdrawObject.logs[0];
+     truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
+     assert.strictEqual(withdrawEvent.args.sender, initPlayer, "initPlayer isn't right");
+     assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+
+     const tx = await web3.eth.getTransaction(withdrawObject.tx);
+     //getting the receipt for calculating gasCost
+     const receipt = withdrawObject.receipt;
+     //calculating gasCost
+     const gasCost = toBN(tx.gasPrice).mul(toBN(receipt.gasUsed));
+     //calculating expectetbalanceafter
+     const expectedBalanceAfter = toBN(balanceBefore).add(toBN(toWei("12", "Gwei"))).sub(toBN(gasCost));
+     //getting the balance after withdraw
+     const balanceAfter = await web3.eth.getBalance(initPlayer, receipt.blockNumber);
+     //test if expectedBalanceAfter == balanceAfter
+     assert.strictEqual(expectedBalanceAfter.toString(), balanceAfter.toString(), "Balance of initPlayer isn't right");
+
+
   });
 });

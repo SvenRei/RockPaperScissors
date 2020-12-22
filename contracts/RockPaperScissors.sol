@@ -21,6 +21,12 @@ contract RockPaperScissors is Killable{
     scissors
   }
 
+  enum Result{
+    tie,
+    initPlayerWins,
+    challengedPlayerWins
+  }
+
   //struct for setting the data
   //at the moment they can bet every amount they want
   struct GameSession {
@@ -35,7 +41,7 @@ contract RockPaperScissors is Killable{
   event LogGameAcceptance(bytes32 indexed sessionID, address indexed sender, uint bet, uint expirationTime);
   event LogCancelInitator(bytes32 indexed sessionID, address indexed sender, uint bet);
   event LogCancelChallengedPlayer(bytes32 indexed sessionID, address indexed sender, uint bet);
-  event LogSessionSolution(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, uint result, uint bet);
+  event LogSessionSolution(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, Result result, uint bet);
   event LogWithdraw(address indexed sender, uint amount);
 
   mapping(bytes32 => GameSession) public gameSessions;
@@ -56,9 +62,11 @@ contract RockPaperScissors is Killable{
   // 0 = tie
   // 1 = initPlayer wins
   // 2 = challengedPlayer wins
-  function getWinner(Move firstMove, Move secondMove) public pure returns (uint result){
+  function getWinner(Move firstMove, Move secondMove) public pure returns (Result result){
     //https://stackoverflow.com/questions/26436657/rock-paper-scissors-in-java-using-modulus
-    result = (3 + uint(firstMove) - uint(secondMove) ) % 3 ;
+    uint outcome = (3 + uint(firstMove) - uint(secondMove) ) % 3;
+   //Converting the outcome into the result
+    result = Result(outcome);
   }
 
   //function to initialize the game with the challenged Player and the set move! The move is set, because of the hash!
@@ -90,11 +98,11 @@ contract RockPaperScissors is Killable{
     require(msg.value == betInitPlayer, "The entered value is not equal to that of the initiator");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
-    session.bet = betInitPlayer.add(msg.value);
     session.expirationTime = expirationTime;
-    //event
+    
     emit LogGameAcceptance(sessionID, msg.sender, msg.value, expirationTime);
   }
+
   //function to let the initator cancel the session
   function cancelSessionInitiator(bytes32 sessionID) public whenAlive {
     GameSession storage session = gameSessions[sessionID];
@@ -114,7 +122,7 @@ contract RockPaperScissors is Killable{
     address challengedPlayer = session.challengedPlayer;
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
     require(session.expirationTime <= now, "time to reveal the session-solution has exceeded");
-    balances[challengedPlayer] = balances[challengedPlayer].add(session.bet);
+    balances[challengedPlayer] = balances[challengedPlayer].add(session.bet.mul(2));
     emit LogCancelChallengedPlayer(sessionID, msg.sender, balances[challengedPlayer]);
 
     //setting everything to 0, exept for the init.player
@@ -130,16 +138,19 @@ contract RockPaperScissors is Killable{
     Move moveChallengedPlayer = session.move;
     require(moveChallengedPlayer != Move.noMove, "challengedPlayer has not yet carried out a move");
 
-    uint result = getWinner(move, moveChallengedPlayer);
+    Result result = getWinner(move, moveChallengedPlayer);
     uint bet = session.bet;
+    uint balanceInitPlayer = balances[msg.sender];
     address challengedPlayer = session.challengedPlayer;
-    if(result == 0){
-            balances[msg.sender] = bet.div(2);
-            balances[challengedPlayer] = bet.div(2);
-    } else if  (result == 1) {
-      balances[msg.sender] = balances[msg.sender].add(bet);
-    } else if (result == 2) {
-      balances[challengedPlayer] = balances[challengedPlayer].add(bet);
+    uint balanceChallengedPlayer = balances[challengedPlayer];
+
+    if(result == Result.tie){
+        balances[msg.sender] = balanceInitPlayer.add(session.bet);
+        balances[challengedPlayer] = balanceChallengedPlayer.add(session.bet);
+    } else if (result == Result.initPlayerWins) {
+        balances[msg.sender] = balanceInitPlayer.add(bet.mul(2));
+    } else if (result == Result.challengedPlayerWins) {
+        balances[challengedPlayer] = balanceChallengedPlayer.add(bet.mul(2));
     }
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
@@ -152,7 +163,7 @@ contract RockPaperScissors is Killable{
   function withdraw(uint withdrawDelta) public {
      uint balance = balances[msg.sender];
      require(withdrawDelta > 0, "A higher balance than zero, is a prerequisite");
-     require(withdrawDelta <= balance, "withdrawBalance > balance[msg.sender]");
+     require(withdrawDelta <= balance, "withdrawDelta > balance[msg.sender]");
      emit LogWithdraw(msg.sender, withdrawDelta);
      balances[msg.sender] = balance.sub(withdrawDelta);
      //transferring the money to the accounts
