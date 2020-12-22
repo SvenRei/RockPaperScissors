@@ -107,8 +107,7 @@ const move = {
     assert.strictEqual(resultTest.challengedPlayer.toString(), challengedPlayer.toString(), "not the challengedPlayer");
     assert.strictEqual(resultTest.move.toString(), move.NoMove.toString(), "not the right move");
     assert.strictEqual(resultTest.expirationTime.toString(), getTime.toString(), "expirationTime is not right");
-    assert.strictEqual(resultTest.betInitPlayer.toString(), betInitPlayer.toString(), "not the right bet of the initPlayer");
-    assert.strictEqual(resultTest.betChallengedPlayer.toString(), zero.toString(), "not the right bet");
+    assert.strictEqual(resultTest.bet.toString(), betInitPlayer.toString(), "not the right bet of the initPlayer");
 
   });
 
@@ -127,7 +126,7 @@ const move = {
     const acceptGameEvent = acceptGameObject.logs[0];
     truffleAssert.eventEmitted(acceptGameObject, "LogGameAcceptance");
     assert.strictEqual(acceptGameEvent.args.sender, challengedPlayer, "not the challengedPlayer");
-    assert.strictEqual(acceptGameEvent.args.setAmount.toString(), betChallengedPlayer.toString(), "not the right bet of the challengedPlayer");
+    assert.strictEqual(acceptGameEvent.args.bet.toString(), betChallengedPlayer.toString(), "not the right bet of the challengedPlayer");
     assert.strictEqual(acceptGameEvent.args.expirationTime.toString(), getTime.toString(), "latestBlock is not right");
     });
 
@@ -150,14 +149,15 @@ const move = {
 
     const getBlockNumber = await web3.eth.getBlock(acceptGameObject.receipt.blockNumber);
     const getTime = (getBlockNumber.timestamp) + (SECONDS_IN_DAY*7);
+    const totalBets = toWei("4", "Gwei");
 
     const resultTest = await contractInstance.gameSessions(sessionID);
     assert.strictEqual(resultTest.initPlayer.toString(), initPlayer.toString(), "not the initPlayer");
     assert.strictEqual(resultTest.challengedPlayer.toString(), challengedPlayer.toString(), "not the challengedPlayer");
     assert.strictEqual(resultTest.move.toString(), move.Paper.toString(), "not the right move");
     assert.strictEqual(resultTest.expirationTime.toString(), getTime.toString(), "expirationTime is not right");
-    assert.strictEqual(resultTest.betInitPlayer.toString(), betInitPlayer.toString(), "not the right bet of the initPlayer");
-    assert.strictEqual(resultTest.betChallengedPlayer.toString(), betChallengedPlayer.toString(), "not the right bet of the challengedPlayer");
+    assert.strictEqual(resultTest.bet.toString(), totalBets.toString(), "not the right bet of the initPlayer");
+
   });
 
   it("test: Init a game two times should not be possible", async() => {
@@ -222,8 +222,7 @@ const move = {
     assert.strictEqual(storageClearedObject.initPlayer.toString(), initPlayer.toString(), "not the initPlayer");
     assert.strictEqual(storageClearedObject.challengedPlayer.toString(), zeroAddress.toString(), "not the challengedPlayer");
     assert.strictEqual(storageClearedObject.move.toString(), zero.toString(), "not the right move");
-    assert.strictEqual(storageClearedObject.betInitPlayer.toString(), zero.toString(), "not the right betInitPlayer");
-    assert.strictEqual(storageClearedObject.betChallengedPlayer.toString(), zero.toString(), "not the right bet");
+    assert.strictEqual(storageClearedObject.bet.toString(), zero.toString(), "not the right betInitPlayer");
 });
 
   it("test: LogCancelInitiator-event should be emitted", async() => {
@@ -241,7 +240,7 @@ const move = {
     assert.strictEqual(cancelEvent.args.bet.toString(),betInitPlayer.toString() , "betInitPlayer is not right");
   });
 
-  it("test: LogCancelInitiator-event should be emitted and the storage should be cleared ", async() => {
+  it("test: The storage should be cleared within the LogCancelInitiator-event  ", async() => {
     const betInitPlayer = toWei("2", "Gwei");
     const sessionID = await contractInstance.hash(initPlayer, toHex(secret), move.Scissor);
     await contractInstance.initGame(challengedPlayer, sessionID, {from: initPlayer, value: betInitPlayer});
@@ -252,8 +251,7 @@ const move = {
     assert.strictEqual(storageClearedObject.initPlayer.toString(), initPlayer.toString(), "not the initPlayer");
     assert.strictEqual(storageClearedObject.challengedPlayer.toString(), zeroAddress.toString(), "not the challengedPlayer");
     assert.strictEqual(storageClearedObject.move.toString(), zero.toString(), "not the right move");
-    assert.strictEqual(storageClearedObject.betInitPlayer.toString(), zero.toString(), "not the right betInitPlayer");
-    assert.strictEqual(storageClearedObject.betChallengedPlayer.toString(), zero.toString(), "not the right bet");
+    assert.strictEqual(storageClearedObject.bet.toString(), zero.toString(), "not the right betInitPlayer");
   });
 
   it("test: LogCancelInitiator-event should be emitted and the Initator get's the money of the challengedPlayer", async() => {
@@ -370,8 +368,7 @@ const move = {
     assert.strictEqual(storageClearedObject.initPlayer.toString(), initPlayer.toString(), "not the initPlayer");
     assert.strictEqual(storageClearedObject.challengedPlayer.toString(), zeroAddress.toString(), "not the challengedPlayer");
     assert.strictEqual(storageClearedObject.move.toString(), zero.toString(), "not the right move");
-    assert.strictEqual(storageClearedObject.betInitPlayer.toString(), zero.toString(), "not the right bet of the initPlayer");
-    assert.strictEqual(storageClearedObject.betChallengedPlayer.toString(), zero.toString(), "not the right bet");
+    assert.strictEqual(storageClearedObject.bet.toString(), zero.toString(), "not the right bet of the initPlayer");
   });
 
 
@@ -500,7 +497,7 @@ const move = {
     await truffleAssert.fails(contractInstance.acceptGame(sessionID, move.Scissor ,{from: challengedPlayer, value: betChallengedPlayer}));
   });
 
-  it("test: If the result is 0, both player should get their mchallengedPlayery", async() => {
+  it("test: If the result is 0, both player should get their insert back", async() => {
     const betInitPlayer = toWei("2", "Gwei");
     const sessionID = await contractInstance.hash(initPlayer, toHex(secret), move.Rock);
     await contractInstance.initGame(challengedPlayer, sessionID, {from: initPlayer, value: betInitPlayer});
