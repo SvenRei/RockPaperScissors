@@ -10,7 +10,7 @@ contract RockPaperScissors is Killable{
 
   using SafeMath for uint;
 
-      uint constant maxGameTime = 7 days; //this is the max period!
+  uint constant maxGameTime = 7 days; //this is the max period!
 
   //enumerate the possible moves of the game
   //https://solidity.readthedocs.io/en/v0.5.3/types.html#enums
@@ -28,12 +28,11 @@ contract RockPaperScissors is Killable{
     address challengedPlayer;
     Move move;
     uint expirationTime;
-    uint betInitPlayer;
-    uint betChallengedPlayer;
+    uint bet;
   }
 
   event LogGameInit(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, uint bet, uint expirationTime);
-  event LogGameAcceptance(bytes32 indexed sessionID, address indexed sender, uint setAmount, uint expirationTime);
+  event LogGameAcceptance(bytes32 indexed sessionID, address indexed sender, uint bet, uint expirationTime);
   event LogCancelInitator(bytes32 indexed sessionID, address indexed sender, uint bet);
   event LogCancelChallengedPlayer(bytes32 indexed sessionID, address indexed sender, uint bet);
   event LogSessionSolution(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, uint result, uint bet);
@@ -43,7 +42,7 @@ contract RockPaperScissors is Killable{
   mapping(address => uint) public balances;
 
   constructor() public{
-    }
+  }
 
   //hash a secret, a move, the sender and the contract address
   function hash(address sender, bytes32 secret, Move move) public view returns(bytes32 sessionID){
@@ -53,11 +52,10 @@ contract RockPaperScissors is Killable{
     sessionID = keccak256(abi.encodePacked(sender, secret, move, address(this)));
   }
 
-  //msg.sender,
   //a function to get the winner of the game
-  // Rock = 1
-  // Paper = 2
-  // Scissors = 3
+  // 0 = tie
+  // 1 = initPlayer wins
+  // 2 = challengedPlayer wins
   function getWinner(Move firstMove, Move secondMove) public pure returns (uint result){
     //https://stackoverflow.com/questions/26436657/rock-paper-scissors-in-java-using-modulus
     result = (3 + uint(firstMove) - uint(secondMove) ) % 3 ;
@@ -76,9 +74,8 @@ contract RockPaperScissors is Killable{
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.initPlayer = msg.sender;
     session.challengedPlayer = challengedPlayer;
-    session.betInitPlayer = msg.value;
+    session.bet = msg.value;
     session.expirationTime = expirationTime;
-    //event
     emit LogGameInit(sessionID, msg.sender, challengedPlayer ,msg.value, expirationTime);
   }
 
@@ -88,11 +85,12 @@ contract RockPaperScissors is Killable{
     //requirements for the acceptance
     require((uint(Move.noMove) < uint(move)), "The challengedPlayer is not allowed to set NoMove");
     GameSession storage session = gameSessions[sessionID];
-    require(msg.value == session.betInitPlayer, "The entered value is not equal to that of the initiator");
+    uint betInitPlayer = session.bet;
     require(session.move == Move.noMove, "The challengedPlayer has already set a move");
+    require(msg.value == betInitPlayer, "The entered value is not equal to that of the initiator");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
-    session.betChallengedPlayer = msg.value;
+    session.bet = betInitPlayer.add(msg.value);
     session.expirationTime = expirationTime;
     //event
     emit LogGameAcceptance(sessionID, msg.sender, msg.value, expirationTime);
@@ -103,13 +101,12 @@ contract RockPaperScissors is Killable{
     address initPlayer = session.initPlayer;
     require(session.move == Move.noMove, "the challengedPlayer has set a move");
     require(session.expirationTime <= now, "time-window to set a move for the challengedPlayer has exceeded");
-    balances[initPlayer] = balances[initPlayer].add(session.betInitPlayer).add(session.betChallengedPlayer);
+    balances[initPlayer] = balances[initPlayer].add(session.bet);
     emit LogCancelInitator(sessionID, msg.sender , balances[initPlayer]);
 
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
-    session.betInitPlayer = 0;
-    session.betChallengedPlayer = 0;
+    session.bet = 0;
   }
 
   function cancelSessionChallengedPlayer(bytes32 sessionID) public whenAlive {
@@ -117,13 +114,12 @@ contract RockPaperScissors is Killable{
     address challengedPlayer = session.challengedPlayer;
     require(session.move != Move.noMove, "challengedPlayer has not yet carried out a move");
     require(session.expirationTime <= now, "time to reveal the session-solution has exceeded");
-    balances[challengedPlayer] = balances[challengedPlayer].add(session.betInitPlayer).add(session.betChallengedPlayer);
+    balances[challengedPlayer] = balances[challengedPlayer].add(session.bet);
     emit LogCancelChallengedPlayer(sessionID, msg.sender, balances[challengedPlayer]);
 
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
-    session.betInitPlayer = 0;
-    session.betChallengedPlayer = 0;
+    session.bet = 0;
     session.move = Move.noMove;
   }
 
@@ -135,27 +131,22 @@ contract RockPaperScissors is Killable{
     require(moveChallengedPlayer != Move.noMove, "challengedPlayer has not yet carried out a move");
 
     uint result = getWinner(move, moveChallengedPlayer);
-    uint betInitPlayer = session.betInitPlayer;
-    uint betChallengedPlayer = session.betChallengedPlayer;
-    uint bet = (betInitPlayer).add(betChallengedPlayer);
+    uint bet = session.bet;
     address challengedPlayer = session.challengedPlayer;
     if(result == 0){
-            balances[msg.sender] = balances[msg.sender].add(betInitPlayer);
-            balances[challengedPlayer] = balances[challengedPlayer].add(betChallengedPlayer);
+            balances[msg.sender] = bet.div(2);
+            balances[challengedPlayer] = bet.div(2);
     } else if  (result == 1) {
       balances[msg.sender] = balances[msg.sender].add(bet);
     } else if (result == 2) {
       balances[challengedPlayer] = balances[challengedPlayer].add(bet);
     }
-
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);
-    session.betInitPlayer = 0;
-    session.betChallengedPlayer = 0;
+    session.bet = 0;
     session.move = Move.noMove;
 
     emit LogSessionSolution(sessionID, msg.sender, challengedPlayer, result, bet);
-
   }
 
   function withdraw(uint withdrawDelta) public {
