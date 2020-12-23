@@ -28,7 +28,6 @@ contract RockPaperScissors is Killable{
   }
 
   //struct for setting the data
-  //at the moment they can bet every amount they want
   struct GameSession {
     address initPlayer;
     address challengedPlayer;
@@ -37,12 +36,12 @@ contract RockPaperScissors is Killable{
     uint bet;
   }
 
-  event LogGameInit(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, uint bet, uint expirationTime);
-  event LogGameAcceptance(bytes32 indexed sessionID, address indexed sender, uint bet, uint expirationTime);
+  event LogGameInit(bytes32 indexed sessionID, address indexed initPlayer, address indexed challengedPlayer, uint bet, uint expirationTime);
+  event LogGameAcceptance(bytes32 indexed sessionID, address indexed challengedPlayer, uint bet, uint expirationTime);
   event LogCancelInitator(bytes32 indexed sessionID, address indexed sender, uint bet);
   event LogCancelChallengedPlayer(bytes32 indexed sessionID, address indexed sender, uint bet);
-  event LogSessionSolution(bytes32 indexed sessionID, address indexed sender, address indexed challengedPlayer, Result result, uint bet);
-  event LogWithdraw(address indexed sender, uint amount);
+  event LogSessionSolution(bytes32 indexed sessionID, address indexed initPlayer, address indexed challengedPlayer, Result result, uint bet);
+  event LogWithdraw(address indexed sender, uint withdrawDelta);
 
   mapping(bytes32 => GameSession) public gameSessions;
   mapping(address => uint) public balances;
@@ -64,9 +63,7 @@ contract RockPaperScissors is Killable{
   // 2 = challengedPlayer wins
   function getWinner(Move firstMove, Move secondMove) public pure returns (Result result){
     //https://stackoverflow.com/questions/26436657/rock-paper-scissors-in-java-using-modulus
-    uint outcome = (3 + uint(firstMove) - uint(secondMove) ) % 3;
-   //Converting the outcome into the result
-    result = Result(outcome);
+    result = Result((3 + uint(firstMove) - uint(secondMove) ) % 3);
   }
 
   //function to initialize the game with the challenged Player and the set move! The move is set, because of the hash!
@@ -93,13 +90,12 @@ contract RockPaperScissors is Killable{
     //requirements for the acceptance
     require((uint(Move.noMove) < uint(move)), "The challengedPlayer is not allowed to set NoMove");
     GameSession storage session = gameSessions[sessionID];
-    uint betInitPlayer = session.bet;
+    require(msg.value == session.bet, "The entered value is not equal to that of the initiator");
     require(session.move == Move.noMove, "The challengedPlayer has already set a move");
-    require(msg.value == betInitPlayer, "The entered value is not equal to that of the initiator");
     uint expirationTime = now.add(maxGameTime); //for Setting the right period!
     session.move = move;
     session.expirationTime = expirationTime;
-    
+
     emit LogGameAcceptance(sessionID, msg.sender, msg.value, expirationTime);
   }
 
@@ -140,17 +136,15 @@ contract RockPaperScissors is Killable{
 
     Result result = getWinner(move, moveChallengedPlayer);
     uint bet = session.bet;
-    uint balanceInitPlayer = balances[msg.sender];
     address challengedPlayer = session.challengedPlayer;
-    uint balanceChallengedPlayer = balances[challengedPlayer];
 
     if(result == Result.tie){
-        balances[msg.sender] = balanceInitPlayer.add(session.bet);
-        balances[challengedPlayer] = balanceChallengedPlayer.add(session.bet);
+        balances[msg.sender] = balances[msg.sender].add(bet);
+        balances[challengedPlayer] = balances[challengedPlayer].add(bet);
     } else if (result == Result.initPlayerWins) {
-        balances[msg.sender] = balanceInitPlayer.add(bet.mul(2));
+        balances[msg.sender] = balances[msg.sender].add(bet.mul(2));
     } else if (result == Result.challengedPlayerWins) {
-        balances[challengedPlayer] = balanceChallengedPlayer.add(bet.mul(2));
+        balances[challengedPlayer] = balances[challengedPlayer].add(bet.mul(2));
     }
     //setting everything to 0, exept for the init.player
     session.challengedPlayer = address(0x0);

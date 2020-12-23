@@ -94,7 +94,7 @@ const result = {
     const initGameEvent = initGameObject.logs[0];
     truffleAssert.eventEmitted(initGameObject, "LogGameInit");
     assert.strictEqual(initGameEvent.args.sessionID, sessionID, "wrong ID");
-    assert.strictEqual(initGameEvent.args.sender, initPlayer, "not the initPlayer");
+    assert.strictEqual(initGameEvent.args.initPlayer, initPlayer, "not the initPlayer");
     assert.strictEqual(initGameEvent.args.challengedPlayer, challengedPlayer, "not the initPlayer");
     assert.strictEqual(initGameEvent.args.bet.toString(), betInitPlayer.toString(), "not the right bet of the initPlayer");
     assert.strictEqual(initGameEvent.args.expirationTime.toString(), getTime.toString(), "latestBlock is not right");
@@ -132,7 +132,7 @@ const result = {
     const {logs} = acceptGameObject;
     const acceptGameEvent = acceptGameObject.logs[0];
     truffleAssert.eventEmitted(acceptGameObject, "LogGameAcceptance");
-    assert.strictEqual(acceptGameEvent.args.sender, challengedPlayer, "not the challengedPlayer");
+    assert.strictEqual(acceptGameEvent.args.challengedPlayer, challengedPlayer, "not the challengedPlayer");
     assert.strictEqual(acceptGameEvent.args.bet.toString(), betChallengedPlayer.toString(), "not the right bet of the challengedPlayer");
     assert.strictEqual(acceptGameEvent.args.expirationTime.toString(), getTime.toString(), "latestBlock is not right");
     });
@@ -202,7 +202,7 @@ const result = {
     const { logs } = revealSessionObject;
     const revealSessichallengedPlayervent = revealSessionObject.logs[0];
     truffleAssert.eventEmitted(revealSessionObject, "LogSessionSolution");
-    assert.strictEqual(revealSessichallengedPlayervent.args.sender, initPlayer, "not the initator");
+    assert.strictEqual(revealSessichallengedPlayervent.args.initPlayer, initPlayer, "not the initator");
     assert.strictEqual(revealSessichallengedPlayervent.args.challengedPlayer, challengedPlayer, "not the challengedPlayer");
     assert.strictEqual(revealSessichallengedPlayervent.args.result.toString(), result.initPlayerWins.toString(), "result of the game");
     assert.strictEqual(revealSessichallengedPlayervent.args.bet.toString(), betInitPlayer.toString(), "the prize is not right");
@@ -278,7 +278,7 @@ const result = {
     const withdrawEvent = withdrawObject.logs[0];
     truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
     assert.strictEqual(withdrawEvent.args.sender, initPlayer, "initPlayer isn't right");
-    assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+    assert.strictEqual(withdrawEvent.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
     const tx = await web3.eth.getTransaction(withdrawObject.tx);
     //getting the receipt for calculating gasCost
@@ -316,7 +316,7 @@ const result = {
     const withdrawEvent = withdrawObject.logs[0];
     truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
     assert.strictEqual(withdrawEvent.args.sender, initPlayer, "initPlayer isn't right");
-    assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+    assert.strictEqual(withdrawEvent.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
     const tx = await web3.eth.getTransaction(withdrawObject.tx);
     //getting the receipt for calculating gasCost
@@ -402,7 +402,7 @@ const result = {
     const withdrawEvent = withdrawObject.logs[0];
     truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
     assert.strictEqual(withdrawEvent.args.sender, challengedPlayer, "initPlayer isn't right");
-    assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+    assert.strictEqual(withdrawEvent.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
     const tx = await web3.eth.getTransaction(withdrawObject.tx);
     //getting the receipt for calculating gasCost
@@ -445,7 +445,7 @@ const result = {
     const withdrawEvent = withdrawObject.logs[0];
     truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
     assert.strictEqual(withdrawEvent.args.sender, challengedPlayer, "initPlayer isn't right");
-    assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+    assert.strictEqual(withdrawEvent.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
     const tx = await web3.eth.getTransaction(withdrawObject.tx);
     //getting the receipt for calculating gasCost
@@ -476,7 +476,7 @@ const result = {
     const withdrawEvent = withdrawObject.logs[0];
     truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
     assert.strictEqual(withdrawEvent.args.sender, initPlayer, "initPlayer isn't right");
-    assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+    assert.strictEqual(withdrawEvent.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
     const tx = await web3.eth.getTransaction(withdrawObject.tx);
     //getting the receipt for calculating gasCost
@@ -491,7 +491,7 @@ const result = {
     assert.strictEqual(expectedBalanceAfter.toString(), balanceAfter.toString(), "Balance of challengedPlayer isn't right");
   });
 
-  it("test: If the challengedPlayer should be only allowed to set the same amount as the initplayer", async() => {
+  it("test: If the challengedPlayer should be only allowed to set the same wager as the initplayer", async() => {
     const betInitPlayer = toWei("2", "Gwei");
     const sessionID = await contractInstance.hash(initPlayer, toHex(secret), move.Rock);
     await contractInstance.initGame(challengedPlayer, sessionID, {from: initPlayer, value: betInitPlayer});
@@ -516,7 +516,7 @@ const result = {
     const withdrawEvent = withdrawObject.logs[0];
     truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
     assert.strictEqual(withdrawEvent.args.sender, initPlayer, "initPlayer isn't right");
-    assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+    assert.strictEqual(withdrawEvent.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
     const tx = await web3.eth.getTransaction(withdrawObject.tx);
     //getting the receipt for calculating gasCost
@@ -538,7 +538,7 @@ const result = {
     const withdrawEvent1 = withdrawObject1.logs[0];
     truffleAssert.eventEmitted(withdrawObject1, "LogWithdraw");
     assert.strictEqual(withdrawEvent1.args.sender, challengedPlayer, "initPlayer isn't right");
-    assert.strictEqual(withdrawEvent1.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+    assert.strictEqual(withdrawEvent1.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
     const tx1 = await web3.eth.getTransaction(withdrawObject1.tx);
     //getting the receipt for calculating gasCost
@@ -579,7 +579,7 @@ const result = {
      const withdrawEvent = withdrawObject.logs[0];
      truffleAssert.eventEmitted(withdrawObject, "LogWithdraw");
      assert.strictEqual(withdrawEvent.args.sender, initPlayer, "initPlayer isn't right");
-     assert.strictEqual(withdrawEvent.args.amount.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
+     assert.strictEqual(withdrawEvent.args.withdrawDelta.toString(), withdrawDelta.toString(), "not the right withdrawDelta");
 
      const tx = await web3.eth.getTransaction(withdrawObject.tx);
      //getting the receipt for calculating gasCost
